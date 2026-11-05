@@ -8,6 +8,6 @@
 // NEVER paste the "secret" or "service_role" key here.
 
 window.BRIEF_CONFIG = {
-  supabaseUrl: 'https://cipnpfmteviijmqfzxoq.supabase.co/rest/v1/',
-  supabaseAnonKey: 'sb_publishable_5rQMn0Fz8Lm4qPQDA0OhRQ_L9dr4mJX'
+  supabaseUrl: 'https://cipnpfmteviijmqfzxoq.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpcG5wZm10ZXZpaWptcWZ6eG9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4NzgyOTQsImV4cCI6MjEwOTQ1NDI5NH0.weidSVEgrI2KlcSi9ZeVtz1D-imOefPAZXlYKdlyWXg'
 };
