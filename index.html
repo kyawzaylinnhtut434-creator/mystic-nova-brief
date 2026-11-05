@@ -397,7 +397,8 @@ const toastSubs=new Set();
 function toast(msg,bad){ toastSubs.forEach(f=>f({id:rid(6),msg,bad})); }
 function errMsg(e){
   const c=e&&e.code, m=(e&&e.message)||'';
-  if(/Failed to fetch|NetworkError|Load failed|network/i.test(m)) return 'Could not reach the database. Check your internet connection and try again.';
+  if(/invalid api key|no api key|apikey/i.test(m)) return 'The connection key in config.js isn’t right. In Supabase → Project Settings → API Keys, open “Legacy API keys”, copy the “anon public” key (it starts with eyJ) and paste it into config.js. (Technical detail: '+m+')';
+  if(/Failed to fetch|NetworkError|Load failed|network/i.test(m)) return 'Could not reach the database. Check the Project URL in config.js is exactly right (it ends in .supabase.co), and that the Supabase project isn’t paused. (Technical detail: '+m+')';
   if(c==='invalid_argument'||/row-level security|permission denied/i.test(m)) return 'This change could not be saved because your account does not have permission.';
   if(/JWT|expired|refresh token/i.test(m)) return 'Your session has expired. Reload the page and sign in again.';
   if(/payload too large|413|too large/i.test(m)) return 'That is too large to save. Try a smaller file.';
@@ -1964,7 +1965,7 @@ function ClientApp({settings}){
 function SignIn({settings}){
   const [email,setEmail]=useState(''); const [pw,setPw]=useState(''); const [busy,setBusy]=useState(false); const [err,setErr]=useState('');
   const go=async e=>{ e.preventDefault(); setBusy(true); setErr('');
-    try{ const {error}=await Auth.sb.auth.signInWithPassword({email:email.trim(),password:pw}); if(error){ setErr(/invalid/i.test(error.message)?'That email and password don’t match a studio account.':errMsg(error)); setBusy(false); } }
+    try{ const {error}=await Auth.sb.auth.signInWithPassword({email:email.trim(),password:pw}); if(error){ const m=error.message||''; setErr(/invalid login credentials/i.test(m)?'That email and password don’t match a studio account. Check the email is exactly as listed in Supabase → Authentication → Users.':/email not confirmed/i.test(m)?'This account hasn’t been confirmed. In Supabase → Authentication → Users, open the user and confirm them (or recreate them with “Auto Confirm User” ticked).':errMsg(error)); setBusy(false); } }
     catch(x){ setErr(errMsg(x)); setBusy(false); } };
   return html`<${Fragment}><${TopBar} settings=${settings} role="Sign in"/>
     <div className="center-screen"><form className="center-card" onSubmit=${go}>
