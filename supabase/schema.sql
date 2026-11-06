@@ -60,6 +60,16 @@ create table if not exists public.issued (       -- the brief version sent to th
   updated_at timestamptz not null default now()
 );
 
+-- ---------- table access for the app ----------
+-- Newer Supabase projects don't open new tables to the app automatically.
+-- These grants let the app reach its tables; the access rules further down
+-- still decide exactly who can see and change each row.
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.settings, public.projects, public.versions, public.invites, public.briefs, public.issued to authenticated;
+grant select, delete on public.project_access to authenticated;
+grant select on public.admins to authenticated;
+grant select on public.settings to anon;
+
 -- ---------- helper functions ----------
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public as $$
