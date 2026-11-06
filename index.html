@@ -65,6 +65,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .brand{display:flex;align-items:center;gap:10px;min-width:0;background:none;border:0;padding:0;cursor:pointer;text-align:left}
 .mark{width:30px;height:30px;border-radius:5px;background:var(--fg);color:var(--bg);display:grid;place-items:center;font-family:var(--font-d);font-weight:600;font-size:13px;flex:none;overflow:hidden}
 .mark img{width:100%;height:100%;object-fit:contain;background:#fff}
+.logo-wide{display:block;height:34px;width:auto;max-width:min(230px,52vw);object-fit:contain;background:#fff;border-radius:5px;padding:3px 7px;box-sizing:content-box}
+.logo-wide.lg{height:46px;max-width:min(320px,70vw)}
 .brand-name{font-family:var(--font-d);font-weight:500;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand-sub{font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
 .nav{display:flex;gap:4px;margin-left:auto}
@@ -1361,7 +1363,7 @@ function BriefDoc({brief,project,settings,version,approval}){
   const secs=(brief.sections||[]).filter(s=>s.included!==false);
   return html`<article className="doc">
     <header className="doc-cover">
-      <div className="spread"><div className="row"><${Mark} settings=${settings}/><div><div style=${{fontWeight:600}}>${settings.studioName}</div><div className="small muted">Interior design brief</div></div></div>
+      <div className="spread"><div className="row">${isWideLogo(settings)?html`<${LogoWide} settings=${settings} large=${true}/>`:html`<${Mark} settings=${settings}/><div><div style=${{fontWeight:600}}>${settings.studioName}</div><div className="small muted">Interior design brief</div></div>`}</div>
         <div className="small muted mono" style=${{textAlign:'right'}}>${project.ref}<br/>${version?`Version ${version.n} · ${fmtDate(version.at)}`:'Working draft'}</div></div>
       <span className="eyebrow">Interior Design Project Brief</span>
       <h1>${i.projectName||'Untitled project'}</h1>
@@ -1372,6 +1374,8 @@ function BriefDoc({brief,project,settings,version,approval}){
     <p className="small muted" style=${{marginTop:'24px'}}>${settings.footer}</p>
   </article>`;
 }
+const isWideLogo=s=>!!(s&&s.logo&&(s.logoAspect||1)>1.6);
+function LogoWide({settings,large}){ return html`<img className=${'logo-wide'+(large?' lg':'')} src=${settings.logo} alt=${settings.studioName||'Studio logo'}/>`; }
 function Mark({settings,size}){
   const s=settings||{}; const ini=(s.studioName||'S').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
   return html`<span className="mark" style=${size?{width:size,height:size}:null}>${s.logo?html`<img src=${s.logo} alt=""/>`:ini}</span>`;
@@ -1397,9 +1401,11 @@ async function exportBriefPdf({brief,project,settings,version,approval}){
   if(settings.cover==='colour'){ doc.setFillColor(...ACC); doc.rect(0,0,W,H*0.56,'F'); }
   const onColour=settings.cover==='colour';
   const txt=onColour?[255,255,255]:INK;
-  if(settings.logo){ try{ const fmt=/png/.test(settings.logo)?'PNG':'JPEG'; doc.addImage(settings.logo,fmt,M,M,18,18); }catch(e){} }
+  const wideLogo=isWideLogo(settings);
+  if(wideLogo){ try{ const fmt=/png/.test(settings.logo)?'PNG':'JPEG'; const lh=13, lw=Math.min(78,lh*settings.logoAspect); if(onColour){ doc.setFillColor(255,255,255); doc.roundedRect(M-2,M-2,lw+4,(lw/settings.logoAspect)+4,1.5,1.5,'F'); } doc.addImage(settings.logo,fmt,M,M,lw,lw/settings.logoAspect); }catch(e){} }
+  else if(settings.logo){ try{ const fmt=/png/.test(settings.logo)?'PNG':'JPEG'; doc.addImage(settings.logo,fmt,M,M,18,18); }catch(e){} }
   else { doc.setFillColor(...(onColour?[255,255,255]:INK)); doc.roundedRect(M,M,14,14,1.5,1.5,'F'); doc.setTextColor(...(onColour?ACC:[255,255,255])); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(T((settings.studioName||'S').split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase()),M+7,M+8.6,{align:'center'}); }
-  doc.setTextColor(...txt); doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.text(T(settings.studioName||''),M+(settings.logo?22:18),M+6.5);
+  doc.setTextColor(...txt); doc.setFont('helvetica','bold'); doc.setFontSize(10.5); if(!wideLogo) doc.text(T(settings.studioName||''),M+(settings.logo?22:18),M+6.5);
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.text(T(project.ref||''),W-M,M+6.5,{align:'right'});
   doc.setFontSize(9); doc.setCharSpace(.6); doc.text('INTERIOR DESIGN PROJECT BRIEF',M,110); doc.setCharSpace(0);
   doc.setFont('helvetica','bold'); doc.setFontSize(30); const tl=doc.splitTextToSize(T(i.projectName||'Untitled project'),CW); doc.text(tl,M,124);
@@ -1476,7 +1482,7 @@ function useClaims(){
 }
 function TopBar({settings,role,view,setView,onSignOut}){
   return html`<header className="top"><div className="wrap">
-    <button className="brand" onClick=${()=>setView?setView('projects'):setHash('')} aria-label="Home"><${Mark} settings=${settings}/><span style=${{minWidth:0,display:'flex',flexDirection:'column'}}><span className="brand-name">${settings.studioName}</span><span className="brand-sub">Design brief studio</span></span></button>
+    <button className="brand" onClick=${()=>setView?setView('projects'):setHash('')} aria-label="Home">${isWideLogo(settings)?html`<${LogoWide} settings=${settings}/>`:html`<${Mark} settings=${settings}/><span style=${{minWidth:0,display:'flex',flexDirection:'column'}}><span className="brand-name">${settings.studioName}</span><span className="brand-sub">Design brief studio</span></span>`}</button>
     ${setView?html`<nav className="nav"><button aria-current=${view==='projects'?'page':undefined} onClick=${()=>setView('projects')}><${Icon} n="grid"/><span>Projects</span></button><button aria-current=${view==='settings'?'page':undefined} onClick=${()=>setView('settings')}><${Icon} n="gear"/><span>Studio settings</span></button></nav>`:html`<span style=${{marginLeft:'auto'}}></span>`}
     <span className="role">${role}</span>
     ${onSignOut&&html`<button className="btn ghost sm" onClick=${onSignOut}>Sign out</button>`}</div></header>`;
@@ -1798,7 +1804,21 @@ function InviteDialog({p,setP,settings,claim,onClose}){
 /* ================= designer: settings ================= */
 function Settings({settings,setSettings,save}){
   const s=settings; const u=(k,v)=>setSettings(n=>({...withDefaults(n),[k]:v}));
-  const logo=async file=>{ try{ const url=URL.createObjectURL(file); const img=await new Promise((r,j)=>{const i=new Image(); i.onload=()=>r(i); i.onerror=j; i.src=url;}); const sc=Math.min(1,360/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc); c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); u('logo',c.toDataURL('image/png')); }catch(e){ toast('That image could not be used as a logo. Try a PNG or JPG.',true); } };
+  const logo=async file=>{ try{
+    const url=URL.createObjectURL(file); const img=await new Promise((r,j)=>{const i=new Image(); i.onload=()=>r(i); i.onerror=j; i.src=url;});
+    const sc=Math.min(1,1600/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.width*sc)); c.height=Math.max(1,Math.round(img.height*sc));
+    const x=c.getContext('2d'); x.drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+    const W=c.width, H=c.height, d=x.getImageData(0,0,W,H).data; const ink=(xx,yy)=>{ const k=(yy*W+xx)*4; return d[k+3]>24&&!(d[k]>232&&d[k+1]>232&&d[k+2]>232); };
+    // find the main block of the logo, ignoring small stray marks near the edges
+    const band=(mass,gap)=>{ let best=null,cur=null,blank=0; for(let i=0;i<mass.length;i++){ if(mass[i]>0){ if(!cur) cur={a:i,b:i,m:0}; cur.b=i; cur.m+=mass[i]; blank=0; } else if(cur){ if(++blank>gap){ if(!best||cur.m>best.m) best=cur; cur=null; blank=0; } } } if(cur&&(!best||cur.m>best.m)) best=cur; return best; };
+    const rows=new Array(H).fill(0); for(let yy=0;yy<H;yy++) for(let xx=0;xx<W;xx++) if(ink(xx,yy)) rows[yy]++;
+    const rb=band(rows,Math.round(H*0.06)); let x0=0,y0=0,x1=W-1,y1=H-1;
+    if(rb){ y0=rb.a; y1=rb.b; const cols=new Array(W).fill(0); for(let yy=y0;yy<=y1;yy++) for(let xx=0;xx<W;xx++) if(ink(xx,yy)) cols[xx]++; const cb=band(cols,Math.round(W*0.12)); if(cb){ x0=cb.a; x1=cb.b; } }
+    const pad=Math.round(Math.max(x1-x0,y1-y0)*0.03); x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(c.width-1,x1+pad); y1=Math.min(c.height-1,y1+pad);
+    const w=x1-x0+1, h=y1-y0+1, aspect=w/h, k2=Math.min(1,(aspect>1.6?900:400)/Math.max(w,h));
+    const o=document.createElement('canvas'); o.width=Math.round(w*k2); o.height=Math.round(h*k2); const ox=o.getContext('2d'); ox.fillStyle='#fff'; ox.fillRect(0,0,o.width,o.height); ox.drawImage(c,x0,y0,w,h,0,0,o.width,o.height);
+    setSettings(n=>({...withDefaults(n),logo:o.toDataURL('image/png'),logoAspect:+aspect.toFixed(3)}));
+  }catch(e){ toast('That image could not be used as a logo. Try a PNG or JPG.',true); } };
   const inp=useRef();
   const [pw,setPw]=useState(''); const [pwBusy,setPwBusy]=useState(false);
   const changePw=async()=>{ if(pw.length<8){ toast('Use at least 8 characters.',true); return; } setPwBusy(true); const {error}=await Auth.sb.auth.updateUser({password:pw}); setPwBusy(false); if(error) toast(error.message,true); else { setPw(''); toast('Password changed'); } };
@@ -1810,7 +1830,7 @@ function Settings({settings,setSettings,save}){
         <div className="field"><label htmlFor="st-des">Default designer</label><input id="st-des" type="text" value=${s.designer} onChange=${e=>u('designer',e.target.value)}/></div>
         <div className="field"><label htmlFor="st-pre">Reference prefix</label><input id="st-pre" type="text" maxLength="6" value=${s.refPrefix} onChange=${e=>u('refPrefix',e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''))}/><span className="help mono">${s.refPrefix||'ID'}-${new Date().getFullYear()}-001</span></div>
         <div className="field"><label htmlFor="st-acc">Brief accent colour</label><div className="row"><input id="st-acc" type="color" value=${s.accent} onChange=${e=>u('accent',e.target.value)} style=${{width:'48px',height:'38px',padding:'2px'}}/><span className="mono small">${s.accent}</span></div></div>
-        <div className="field full"><span className="flabel">Logo</span><div className="row"><${Mark} settings=${s} size="48px"/><button className="btn sm" onClick=${()=>inp.current.click()}><${Icon} n="upload"/>Upload logo</button>${s.logo&&html`<button className="btn ghost sm" onClick=${()=>u('logo','')}>Remove</button>`}<input ref=${inp} type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange=${e=>{ if(e.target.files[0]) logo(e.target.files[0]); e.target.value=''; }}/></div><span className="help">Shown in the app, the client portal and on the PDF cover. A square PNG works best.</span></div>
+        <div className="field full"><span className="flabel">Logo</span><div className="row">${isWideLogo(s)?html`<${LogoWide} settings=${s} large=${true}/>`:html`<${Mark} settings=${s} size="48px"/>`}<button className="btn sm" onClick=${()=>inp.current.click()}><${Icon} n="upload"/>Upload logo</button>${s.logo&&html`<button className="btn ghost sm" onClick=${()=>setSettings(n=>({...withDefaults(n),logo:'',logoAspect:1}))}>Remove</button>`}<input ref=${inp} type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange=${e=>{ if(e.target.files[0]) logo(e.target.files[0]); e.target.value=''; }}/></div><span className="help">Shown in the app, the client portal and on the PDF cover. Square icons and wide logos both work — empty space around the logo is trimmed automatically.</span></div>
         <div className="field full"><span className="flabel">PDF cover</span><${Radio} opts=${['Minimal white','Colour band']} value=${s.cover==='colour'?'Colour band':'Minimal white'} onChange=${v=>u('cover',v==='Colour band'?'colour':'minimal')} name="Cover"/></div>
         <div className="field full"><label htmlFor="st-foot">Document footer</label><input id="st-foot" type="text" value=${s.footer} onChange=${e=>u('footer',e.target.value)}/></div>
       </div>
