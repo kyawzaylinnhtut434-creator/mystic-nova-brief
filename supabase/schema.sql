@@ -1,11 +1,11 @@
 -- =====================================================================
 -- Mystic Nova Brief Studio — database setup for Supabase
 --
--- Run this whole file once in Supabase → SQL Editor → New query → Run.
--- BEFORE running: change the email address on the LAST LINE to the
--- email of the studio account you created in Authentication → Users.
--- It is safe to run this file again later (for example to add another
--- studio account).
+-- HOW TO USE: create your studio login first (Authentication → Users →
+-- Add user → Create new user, tick "Auto Confirm User"). Then copy this
+-- whole file into Supabase → SQL Editor → New query and click Run.
+-- You don't need to change anything in it.
+-- It is safe to run again. It never deletes your projects or answers.
 -- =====================================================================
 
 -- ---------- tables ----------
@@ -116,6 +116,13 @@ grant execute on function public.peek_invite(text) to anon, authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
 grant execute on function public.has_access(text) to authenticated;
 
+-- Lets the app's connection check see whether setup is finished (true/false only).
+create or replace function public.studio_ready()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.admins);
+$$;
+grant execute on function public.studio_ready() to anon, authenticated;
+
 -- ---------- row level security ----------
 alter table public.admins enable row level security;
 alter table public.settings enable row level security;
@@ -193,6 +200,12 @@ drop policy if exists brief_files_delete on storage.objects;
 create policy brief_files_delete on storage.objects for delete to authenticated
   using (bucket_id = 'brief-files' and public.has_access((storage.foldername(name))[1]));
 
--- ---------- make your account the studio account ----------
--- Change the email below to the one you created in Authentication → Users.
-insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;
+-- ---------- make your login the studio account ----------
+-- The first time this runs, every login that already exists (not clients)
+-- becomes a studio account. After that it adds no one, so running the file
+-- again is safe. To add a freelancer later, see the setup guide.
+insert into public.admins (user_id)
+select id from auth.users
+where coalesce(is_anonymous, false) = false
+  and not exists (select 1 from public.admins)
+on conflict do nothing;

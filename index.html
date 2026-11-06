@@ -366,7 +366,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:var(--t-s)}
 <script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script>
 "use strict";
@@ -1832,7 +1832,7 @@ function DesignerApp({settings,setSettings,settingsSave}){
   const setView=v=>setHash(v==='settings'?'settings-studio':'');
   return html`<${Fragment}>
     <${TopBar} settings=${settings} role="Studio" view=${view==='settings'?'settings':'projects'} setView=${setView} onSignOut=${Auth.mode==='live'?signOut:null}/>
-    ${Auth.mode==='demo'&&html`<div className="banner"><div className="wrap">Demo mode: projects are saved only in this browser and clients can’t be invited yet. Follow the setup guide (README) to connect your free Supabase database.</div></div>`}
+    ${Auth.mode==='demo'&&html`<div className="banner"><div className="wrap">Demo mode: projects are saved only in this browser and clients can’t be invited yet. Connect your free Supabase database to go live. <button className="btn sm" style=${{marginLeft:'8px'}} onClick=${()=>setHash('setup')}>Connect your database</button></div></div>`}
     ${view==='projects'&&html`<${Dashboard} projects=${projects.docs} slow=${projects.slow} error=${projects.error} claims=${claims} settings=${settings} openProject=${id=>setHash('project-'+id)} onNew=${()=>setCreating(true)}/>`}
     ${view==='project'&&html`<${Workspace} key=${pid} pid=${pid} settings=${settings} setSettings=${setSettings} claims=${claims} onBack=${()=>setHash('')}/>`}
     ${view==='settings'&&html`<${Settings} settings=${settings} setSettings=${setSettings} save=${settingsSave}/>`}
@@ -1961,11 +1961,105 @@ function ClientApp({settings}){
   else body=html`<${ClientHome} projects=${projects} issued=${issued} settings=${settings} open=${id=>setHash('brief-'+id)}/>`;
   return html`<${Fragment}><${TopBar} settings=${settings} role="Client portal"/>${body}<//>`;
 }
+/* ================= connection check (built-in setup helper) ================= */
+function normalizeUrl(u){
+  u=(u||'').trim().replace(/^['"]+|['"]+$/g,'');
+  let m=u.match(/supabase\.com\/dashboard\/project\/([a-z0-9]{20})/i); if(m) return `https://${m[1].toLowerCase()}.supabase.co`;
+  if(/^[a-z0-9]{20}$/i.test(u)) return `https://${u.toLowerCase()}.supabase.co`;
+  if(/^[a-z0-9-]+\.supabase\.co/i.test(u)) u='https://'+u;
+  u=u.replace(/^http:\/\//i,'https://');
+  m=u.match(/^(https:\/\/[a-z0-9-]+\.supabase\.co)/i); if(m) return m[1].toLowerCase();
+  return u.replace(/\/+$/,'');
+}
+const normalizeKey=k=>(k||'').trim().replace(/^['"]+|['"]+$/g,'').replace(/\s+/g,'');
+function jwtPayload(k){ try{ const p=k.split('.')[1]; return JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(p.length/4)*4,'='))); }catch(e){ return null; } }
+const refOf=u=>{ const m=(u||'').match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/); return m?m[1]:''; };
+async function checkConnection(rawUrl,rawKey){
+  const url=normalizeUrl(rawUrl), key=normalizeKey(rawKey); const checks=[];
+  const add=(label,status,detail,fix)=>checks.push({label,status,detail,fix:fix||''});
+  const done=()=>({url,key,checks,ok:checks.every(c=>c.status!=='bad'),formatOk:checks.length>=2&&checks[0].status==='ok'&&checks[1].status==='ok'});
+  if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)){ add('Project URL','bad',url?`“${url}” doesn’t look like a Supabase Project URL.`:'No Project URL entered.','In Supabase, open Project Settings → Data API and copy the Project URL. It looks like https://abcdefghijklmnopqrst.supabase.co'); return done(); }
+  add('Project URL','ok',url);
+  let keyOk=true;
+  if(!key){ add('Public key','bad','No key entered.','In Supabase, open Project Settings → API Keys and copy the Publishable key (or the “anon public” key under Legacy API keys).'); keyOk=false; }
+  else if(/^sb_secret_/.test(key)){ add('Public key','bad','This is your SECRET key. It must never go on your website.','Use the Publishable key (starts with sb_publishable_) or the legacy “anon public” key (starts with eyJ).'); keyOk=false; }
+  else if(/^eyJ/.test(key)){ const p=jwtPayload(key);
+    if(!p){ add('Public key','bad','This key looks incomplete — part of it may be missing.','Copy the whole key again using the copy button next to it in Supabase.'); keyOk=false; }
+    else if(p.role==='service_role'){ add('Public key','bad','This is the service_role (secret) key. It must never go on your website.','Use the “anon public” key instead.'); keyOk=false; }
+    else if(p.ref&&refOf(url)&&p.ref!==refOf(url)){ add('Public key','bad',`This key belongs to a different Supabase project (${p.ref}), not ${refOf(url)}.`,'Copy the Project URL and the key from the same Supabase project.'); keyOk=false; }
+    else add('Public key','ok','Legacy “anon public” key');
+  } else if(/^sb_publishable_/.test(key)) add('Public key','ok','Publishable key');
+  else { add('Public key','bad','This doesn’t look like a Supabase public key.','It should start with sb_publishable_ or eyJ. Copy it again from Project Settings → API Keys.'); keyOk=false; }
+  if(!keyOk) return done();
+  let st=null;
+  try{
+    const r=await fetch(url+'/auth/v1/settings',{headers:{apikey:key}});
+    if(r.status===401||r.status===403){ add('Connection','bad','Supabase rejected this key.','Copy the key again, from the same project as the Project URL.'); return done(); }
+    if(!r.ok){ add('Connection','bad',`Supabase answered with an error (${r.status}).`,'The project may be paused or still starting. Open your Supabase dashboard; if it offers “Restore project”, click it and wait a few minutes.'); return done(); }
+    st=await r.json(); add('Connection','ok','Your website can reach your Supabase project.');
+  }catch(e){ add('Connection','bad','Can’t reach this address.','Check the Project URL is exactly right. If it is, the project may be paused: open your Supabase dashboard and click “Restore project”.'); return done(); }
+  const ext=(st&&st.external)||{};
+  add('Studio sign-in (email)',ext.email===false?'bad':'ok',ext.email===false?'Email sign-in is switched off.':'Switched on.',ext.email===false?'Authentication → Sign In / Providers → Email → switch it on → Save.':'');
+  add('Client links (anonymous sign-ins)',ext.anonymous_users?'ok':'bad',ext.anonymous_users?'Switched on.':'Switched off, so clients can’t open their links.',ext.anonymous_users?'':'Authentication → Sign In / Providers → switch on “Allow anonymous sign-ins” → Save.');
+  try{
+    const r=await fetch(url+'/rest/v1/rpc/studio_ready',{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:'{}'});
+    if(r.status===404){ add('Database','bad','The database hasn’t been set up yet.','Supabase → SQL Editor → New query → paste all of schema.sql → Run.'); }
+    else if(!r.ok){ const t=await r.text(); add('Database','bad',`The database answered with an error (${r.status}).`,'Run schema.sql again in the SQL Editor. Technical detail: '+t.slice(0,160)); }
+    else { const ready=await r.json(); add('Database','ok','Set up.');
+      add('Studio login',ready===true?'ok':'bad',ready===true?'Your studio login is set up.':'No studio login has been set up yet.',ready===true?'':'Authentication → Users → Add user → Create new user (tick “Auto Confirm User”). Then run schema.sql again — it makes that login the studio account.'); }
+  }catch(e){ add('Database','bad','Couldn’t check the database.','Wait a minute and press “Check again”.'); }
+  return done();
+}
+function SetupCheck({settings}){
+  const [url,setUrl]=useState(isConfigured()?CFG.supabaseUrl:''); const [key,setKey]=useState(isConfigured()?CFG.supabaseAnonKey:'');
+  const [res,setRes]=useState(null); const [busy,setBusy]=useState(false);
+  const [em,setEm]=useState(''); const [np,setNp]=useState('');
+  const run=async()=>{ setBusy(true); try{ setRes(await checkConnection(url,key)); }catch(e){ setRes({checks:[{label:'Check',status:'bad',detail:String((e&&e.message)||e),fix:''}],ok:false}); } setBusy(false); };
+  useEffect(()=>{ if(url&&key) run(); },[]);
+  const cfgText=res&&res.formatOk?`window.BRIEF_CONFIG = {\n  supabaseUrl: '${res.url}',\n  supabaseAnonKey: '${res.key}'\n};\n`:'';
+  const same=res&&res.formatOk&&isConfigured()&&normalizeUrl(CFG.supabaseUrl)===res.url&&normalizeKey(CFG.supabaseAnonKey)===res.key;
+  const q=s=>s.replace(/'/g,"''"); const e2=q(em.trim().toLowerCase());
+  const resetSql=em.trim()&&np?`update auth.users\nset encrypted_password = extensions.crypt('${q(np)}', extensions.gen_salt('bf')),\n    email_confirmed_at = coalesce(email_confirmed_at, now())\nwhere lower(email) = '${e2}';\n\ninsert into public.admins (user_id)\nselect id from auth.users where lower(email) = '${e2}'\non conflict do nothing;\n`:'';
+  const icon=s=>s==='ok'?'check':'alert';
+  return html`<${Fragment}><${TopBar} settings=${settings} role="Setup"/>
+    <div className="wrap" style=${{maxWidth:'820px',paddingBlock:'28px 60px'}}><div className="stack" style=${{'--g':'18px'}}>
+      <div className="stack" style=${{'--g':'6px'}}><span className="eyebrow">Setup</span><h1>Connection check</h1>
+        <p className="muted">Paste your Supabase details to test them. This page doesn’t save anything — it checks the details and gives you the exact text for <span className="mono">config.js</span>.</p></div>
+      <div className="panel panel-pad stack" style=${{'--g':'16px'}}>
+        <div className="field"><label htmlFor="su-url">Project URL</label><span className="help">Supabase → Project Settings → Data API. Looks like https://abcdefghijklmnopqrst.supabase.co</span><input id="su-url" type="url" spellCheck="false" value=${url} onChange=${e=>setUrl(e.target.value)} placeholder="https://….supabase.co"/></div>
+        <div className="field"><label htmlFor="su-key">Public key</label><span className="help">Supabase → Project Settings → API Keys. Use the Publishable key (sb_publishable_…) or, under Legacy API keys, the anon public key (eyJ…). Never the secret key.</span><textarea id="su-key" rows="3" spellCheck="false" className="mono" value=${key} onChange=${e=>setKey(e.target.value)} placeholder="sb_publishable_… or eyJ…"></textarea></div>
+        <button className="btn primary" style=${{alignSelf:'flex-start'}} disabled=${busy||!url||!key} onClick=${run}>${busy?'Checking…':res?'Check again':'Check connection'}</button>
+      </div>
+      ${res&&html`<div className="panel panel-pad stack" style=${{'--g':'10px'}}><div className="spread"><h3>Results</h3>${res.ok?html`<span className="pill s-ok">All good</span>`:html`<span className="pill s-rev">Needs fixing</span>`}</div>
+        <div className="checks">${res.checks.map((c,k)=>html`<div key=${k} className=${'chk '+(c.status==='ok'?'ok':'warn')}><${Icon} n=${icon(c.status)}/><div className="stack" style=${{'--g':'3px'}}><span><b>${c.label}:</b> ${c.detail}</span>${c.fix&&html`<span><b>Fix:</b> ${c.fix}</span>`}</div></div>`)}</div></div>`}
+      ${res&&res.formatOk&&html`<div className="panel panel-pad stack" style=${{'--g':'12px'}}>
+        ${same?html`<div className="callout"><span>Your website is already using these details.</span></div>`:html`<${Fragment}><h3>Put these details on your website</h3>
+          <ol style=${{margin:0,paddingLeft:'20px',display:'flex',flexDirection:'column',gap:'6px'}}>
+            <li>On GitHub, open your repository, click <b>config.js</b>, then the <b>pencil icon</b> (Edit).</li>
+            <li>Click inside the text, press <b>Ctrl + A</b> to select everything, then <b>Delete</b>.</li>
+            <li>Click <b>Copy</b> below, then paste into GitHub with <b>Ctrl + V</b>.</li>
+            <li>Click <b>Commit changes</b> (twice, if GitHub asks again).</li>
+            <li>Wait 2 minutes, then reload your website with <b>Ctrl + F5</b>.</li></ol><//>`}
+          <textarea readOnly rows="5" className="mono" value=${cfgText} style=${{fontSize:'12.5px'}} aria-label="config.js text"></textarea>
+          <button className="btn sm" style=${{alignSelf:'flex-start'}} onClick=${()=>copyText(cfgText)}><${Icon} n="copy"/>Copy config.js text</button>
+      </div>`}
+      <div className="panel panel-pad stack" style=${{'--g':'12px'}}><h3>Can’t sign in? Set a new studio password</h3>
+        <p className="small muted">Type the email of your studio login (exactly as shown in Supabase → Authentication → Users) and a new password. Copy the text it makes, then in Supabase open <b>SQL Editor → New query</b>, paste it and click <b>Run</b>. It also makes sure the login is the studio account.</p>
+        <div className="fgrid"><div className="field"><label htmlFor="su-em">Studio email</label><input id="su-em" type="email" value=${em} onChange=${e=>setEm(e.target.value)}/></div>
+          <div className="field"><label htmlFor="su-np">New password</label><input id="su-np" type="text" autoComplete="off" value=${np} onChange=${e=>setNp(e.target.value)} placeholder="At least 8 characters"/></div></div>
+        ${resetSql&&html`<textarea readOnly rows="9" className="mono" value=${resetSql} style=${{fontSize:'12.5px'}} aria-label="Password reset SQL"></textarea>
+          <button className="btn sm" style=${{alignSelf:'flex-start'}} onClick=${()=>copyText(resetSql)}><${Icon} n="copy"/>Copy</button>
+          <p className="help">After running it, Supabase should say “Success”. Then sign in with that email and the new password, typed by hand.</p>`}
+      </div>
+      <button className="btn" style=${{alignSelf:'flex-start'}} onClick=${()=>setHash('')}><${Icon} n="back"/>Back to the app</button>
+    </div></div><//>`;
+}
+
 /* ================= root ================= */
 function SignIn({settings}){
   const [email,setEmail]=useState(''); const [pw,setPw]=useState(''); const [busy,setBusy]=useState(false); const [err,setErr]=useState('');
   const go=async e=>{ e.preventDefault(); setBusy(true); setErr('');
-    try{ const {error}=await Auth.sb.auth.signInWithPassword({email:email.trim(),password:pw}); if(error){ const m=error.message||''; setErr(/invalid login credentials/i.test(m)?'That email and password don’t match a studio account. Check the email is exactly as listed in Supabase → Authentication → Users.':/email not confirmed/i.test(m)?'This account hasn’t been confirmed. In Supabase → Authentication → Users, open the user and confirm them (or recreate them with “Auto Confirm User” ticked).':errMsg(error)); setBusy(false); } }
+    try{ const {error}=await Auth.sb.auth.signInWithPassword({email:email.trim(),password:pw}); if(error){ const m=error.message||''; setErr(/invalid login credentials/i.test(m)?'That email and password don’t match a login in this Supabase project. Check the email is exactly as listed in Supabase → Authentication → Users, or set a new password with the connection check below.':/email not confirmed/i.test(m)?'This account hasn’t been confirmed. In Supabase → Authentication → Users, open the user and confirm them (or recreate them with “Auto Confirm User” ticked).':errMsg(error)); setBusy(false); } }
     catch(x){ setErr(errMsg(x)); setBusy(false); } };
   return html`<${Fragment}><${TopBar} settings=${settings} role="Sign in"/>
     <div className="center-screen"><form className="center-card" onSubmit=${go}>
@@ -1977,21 +2071,24 @@ function SignIn({settings}){
         <button className="btn primary" type="submit" disabled=${busy||!email||!pw} style=${{alignSelf:'flex-start'}}>${busy?'Signing in…':'Sign in'}</button>
       </div>
       <p className="help">Are you a client? You don’t need an account — open the private link your designer sent you.</p>
+      <div className="row" style=${{'--g':'8px'}}><button type="button" className="btn sm" onClick=${()=>setHash('setup')}><${Icon} n="gear"/>Trouble signing in? Run the connection check</button><span className="small muted mono">${refOf(normalizeUrl(CFG.supabaseUrl))}.supabase.co</span></div>
     </form></div><//>`;
 }
 function NotStudio({settings}){
   return html`<${Fragment}><${TopBar} settings=${settings} role="Signed in" onSignOut=${signOut}/>
     <div className="center-screen"><div className="center-card panel panel-pad"><h2>This isn’t a studio account</h2>
       <p className="muted">You’re signed in as <span className="mono">${Auth.email}</span>, but this account can’t open the studio dashboard.</p>
-      <p className="muted small">Setting up the app? Make sure you ran <span className="mono">schema.sql</span> with this email address on its last line (step 4 of the setup guide).</p>
+      <p className="muted small">To make this login the studio account, copy this line, then in Supabase open <b>SQL Editor → New query</b>, paste it and click <b>Run</b>. Then sign out and sign in again.</p>
+      <${CopyBox} value=${`insert into public.admins (user_id) select id from auth.users where lower(email) = '${(Auth.email||'').toLowerCase().replace(/'/g,"''")}' on conflict do nothing;`} label="SQL"/>
       <button className="btn" style=${{alignSelf:'flex-start'}} onClick=${signOut}>Sign out</button></div></div><//>`;
 }
 function Root(){
-  const [ready,setReady]=useState(false); const [ver,setVer]=useState(0);
+  const [ready,setReady]=useState(false); const [ver,setVer]=useState(0); const hash=useHash();
   useEffect(()=>{ initBackend().then(()=>setReady(true),e=>{ console.error(e); Auth.mode='error'; Auth.error=errMsg(e); setReady(true); }); },[]);
   useEffect(()=>{ if(!ready||!Auth.sb) return; const {data}=Auth.sb.auth.onAuthStateChange(ev=>{ if(ev==='SIGNED_IN'||ev==='SIGNED_OUT'||ev==='USER_UPDATED') setTimeout(()=>refreshAuth().then(()=>setVer(v=>v+1)),0); }); return ()=>data.subscription.unsubscribe(); },[ready]);
   if(!ready) return html`<div className="center-screen"><div className="row muted"><div className="spinner"></div>Opening the studio…</div></div>`;
-  if(Auth.mode==='error') return html`<div className="center-screen"><div className="center-card panel panel-pad"><h2>The app can’t start</h2><p className="muted">${Auth.error}</p><button className="btn" style=${{alignSelf:'flex-start'}} onClick=${()=>location.reload()}>Reload</button></div></div>`;
+  if(Auth.mode==='error'&&hash==='setup') return html`<${Fragment}><${SetupCheck} settings=${withDefaults(null)}/><${Toasts}/><//>`;
+  if(Auth.mode==='error') return html`<div className="center-screen"><div className="center-card panel panel-pad"><h2>The app can’t start</h2><p className="muted">${Auth.error}</p><div className="row"><button className="btn" onClick=${()=>location.reload()}>Reload</button><button className="btn" onClick=${()=>setHash('setup')}>Run the connection check</button></div></div></div>`;
   return html`<${Fragment}><${Main} key=${String(Auth.isAdmin)} ver=${ver}/><${Toasts}/><//>`;
 }
 function Main(){
@@ -2001,6 +2098,7 @@ function Main(){
   const sView=useDocValue(!designer&&Auth.mode==='live'?P.settings:null);
   const settings=withDefaults(designer?sRaw:sView.data);
   useEffect(()=>{ document.title=`${settings.studioName} · Brief Studio`; },[settings.studioName]);
+  if(hash==='setup') return html`<${SetupCheck} settings=${settings}/>`;
   const clientRoute=/^(invite|brief)-/.test(hash);
   if(clientRoute&&Auth.mode!=='live') return html`<${Fragment}><${TopBar} settings=${settings} role="Client portal"/><div className="center-screen"><div className="center-card panel panel-pad"><h2>Client links aren’t switched on yet</h2><p className="muted">This app is in demo mode. Client links start working once it is connected to Supabase — see the setup guide.</p><button className="btn" style=${{alignSelf:'flex-start'}} onClick=${()=>setHash('')}>Open the studio</button></div></div><//>`;
   if(clientRoute) return html`<${ClientApp} settings=${settings}/>`;

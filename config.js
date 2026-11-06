@@ -1,6 +1,7 @@
 // Mystic Nova Brief Studio — connection settings
 //
-// Paste your Supabase details here (Supabase → Project Settings → API Keys / Data API).
+// The easiest way to fill this in: open your website, click "Connect your database",
+// and copy the text the connection check gives you.
 // Until you do, the app runs in demo mode and saves only in your own browser.
 //
 // The key below is the PUBLIC key ("publishable" or "anon public"). It is safe to publish:
