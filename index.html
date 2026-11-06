@@ -13,6 +13,7 @@
 <style>
 /* Layout: quiet studio workspace — top bar, wide content column, document-like panels; drawing-office details in mono (refs, dimensions, status). */
 :root{
+  --logo-filter:none;
   --bg:#F3F5F2; --surface:#FFFFFF; --sunk:#E9EDE8; --line:#DBE1DA; --line-2:#C5CEC4;
   --fg:#131714; --fg-2:#3A433C; --muted:#68736A;
   --accent:#2C6646; --accent-ink:#FFFFFF; --accent-soft:#E0ECE3; --accent-line:#B9D3C1;
@@ -28,12 +29,14 @@
   --fg:#E6EBE7; --fg-2:#C2CBC5; --muted:#8C978F;
   --accent:#86C29D; --accent-ink:#0D110F; --accent-soft:#1B2B22; --accent-line:#2F4A3A;
   --warn:#DFB15A; --warn-soft:#2B2416; --bad:#E58978; --bad-soft:#321C18; --info:#91B1DA; --info-soft:#19232F;
+  --logo-filter:invert(1);
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0D110F; --surface:#141917; --sunk:#1A201D; --line:#252E29; --line-2:#334039;
   --fg:#E6EBE7; --fg-2:#C2CBC5; --muted:#8C978F;
   --accent:#86C29D; --accent-ink:#0D110F; --accent-soft:#1B2B22; --accent-line:#2F4A3A;
   --warn:#DFB15A; --warn-soft:#2B2416; --bad:#E58978; --bad-soft:#321C18; --info:#91B1DA; --info-soft:#19232F;
+  --logo-filter:invert(1);
   color-scheme:dark}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -65,8 +68,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .brand{display:flex;align-items:center;gap:10px;min-width:0;background:none;border:0;padding:0;cursor:pointer;text-align:left}
 .mark{width:30px;height:30px;border-radius:5px;background:var(--fg);color:var(--bg);display:grid;place-items:center;font-family:var(--font-d);font-weight:600;font-size:13px;flex:none;overflow:hidden}
 .mark img{width:100%;height:100%;object-fit:contain;background:#fff}
-.logo-wide{display:block;height:34px;width:auto;max-width:min(230px,52vw);object-fit:contain;background:#fff;border-radius:5px;padding:3px 7px;box-sizing:content-box}
-.logo-wide.lg{height:46px;max-width:min(320px,70vw)}
+.mark.has-logo{background:transparent;overflow:visible}
+.mark.has-logo img{background:transparent}
+img.mono{filter:var(--logo-filter)}
+.logo-wide{display:block;height:30px;width:auto;max-width:min(220px,50vw);object-fit:contain}
+.logo-wide.lg{height:44px;max-width:min(320px,70vw)}
 .brand-name{font-family:var(--font-d);font-weight:500;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand-sub{font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
 .nav{display:flex;gap:4px;margin-left:auto}
@@ -1375,10 +1381,10 @@ function BriefDoc({brief,project,settings,version,approval}){
   </article>`;
 }
 const isWideLogo=s=>!!(s&&s.logo&&(s.logoAspect||1)>1.6);
-function LogoWide({settings,large}){ return html`<img className=${'logo-wide'+(large?' lg':'')} src=${settings.logo} alt=${settings.studioName||'Studio logo'}/>`; }
+function LogoWide({settings,large}){ return html`<img className=${'logo-wide'+(large?' lg':'')+(settings.logoMono?' mono':'')} src=${settings.logo} alt=${settings.studioName||'Studio logo'}/>`; }
 function Mark({settings,size}){
   const s=settings||{}; const ini=(s.studioName||'S').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
-  return html`<span className="mark" style=${size?{width:size,height:size}:null}>${s.logo?html`<img src=${s.logo} alt=""/>`:ini}</span>`;
+  return html`<span className=${'mark'+(s.logo&&s.logoClear?' has-logo':'')} style=${size?{width:size,height:size}:null}>${s.logo?html`<img className=${s.logoMono?'mono':''} src=${s.logo} alt=""/>`:ini}</span>`;
 }
 
 /* ================= PDF export ================= */
@@ -1402,8 +1408,8 @@ async function exportBriefPdf({brief,project,settings,version,approval}){
   const onColour=settings.cover==='colour';
   const txt=onColour?[255,255,255]:INK;
   const wideLogo=isWideLogo(settings);
-  if(wideLogo){ try{ const fmt=/png/.test(settings.logo)?'PNG':'JPEG'; const lh=13, lw=Math.min(78,lh*settings.logoAspect); if(onColour){ doc.setFillColor(255,255,255); doc.roundedRect(M-2,M-2,lw+4,(lw/settings.logoAspect)+4,1.5,1.5,'F'); } doc.addImage(settings.logo,fmt,M,M,lw,lw/settings.logoAspect); }catch(e){} }
-  else if(settings.logo){ try{ const fmt=/png/.test(settings.logo)?'PNG':'JPEG'; doc.addImage(settings.logo,fmt,M,M,18,18); }catch(e){} }
+  if(wideLogo){ try{ const fmt=/png/.test(settings.logo)?'PNG':'JPEG'; const lh=13, lw=Math.min(78,lh*settings.logoAspect); const src=onColour&&settings.logoLight?settings.logoLight:settings.logo; if(onColour&&!settings.logoLight){ doc.setFillColor(255,255,255); doc.roundedRect(M-2,M-2,lw+4,(lw/settings.logoAspect)+4,1.5,1.5,'F'); } doc.addImage(src,fmt,M,M,lw,lw/settings.logoAspect); }catch(e){} }
+  else if(settings.logo){ try{ const fmt=/png/.test(settings.logo)?'PNG':'JPEG'; doc.addImage(onColour&&settings.logoLight?settings.logoLight:settings.logo,fmt,M,M,18,18); }catch(e){} }
   else { doc.setFillColor(...(onColour?[255,255,255]:INK)); doc.roundedRect(M,M,14,14,1.5,1.5,'F'); doc.setTextColor(...(onColour?ACC:[255,255,255])); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(T((settings.studioName||'S').split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase()),M+7,M+8.6,{align:'center'}); }
   doc.setTextColor(...txt); doc.setFont('helvetica','bold'); doc.setFontSize(10.5); if(!wideLogo) doc.text(T(settings.studioName||''),M+(settings.logo?22:18),M+6.5);
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.text(T(project.ref||''),W-M,M+6.5,{align:'right'});
@@ -1816,8 +1822,18 @@ function Settings({settings,setSettings,save}){
     if(rb){ y0=rb.a; y1=rb.b; const cols=new Array(W).fill(0); for(let yy=y0;yy<=y1;yy++) for(let xx=0;xx<W;xx++) if(ink(xx,yy)) cols[xx]++; const cb=band(cols,Math.round(W*0.12)); if(cb){ x0=cb.a; x1=cb.b; } }
     const pad=Math.round(Math.max(x1-x0,y1-y0)*0.03); x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(c.width-1,x1+pad); y1=Math.min(c.height-1,y1+pad);
     const w=x1-x0+1, h=y1-y0+1, aspect=w/h, k2=Math.min(1,(aspect>1.6?900:400)/Math.max(w,h));
-    const o=document.createElement('canvas'); o.width=Math.round(w*k2); o.height=Math.round(h*k2); const ox=o.getContext('2d'); ox.fillStyle='#fff'; ox.fillRect(0,0,o.width,o.height); ox.drawImage(c,x0,y0,w,h,0,0,o.width,o.height);
-    setSettings(n=>({...withDefaults(n),logo:o.toDataURL('image/png'),logoAspect:+aspect.toFixed(3)}));
+    const o=document.createElement('canvas'); o.width=Math.round(w*k2); o.height=Math.round(h*k2); const ox=o.getContext('2d'); ox.drawImage(c,x0,y0,w,h,0,0,o.width,o.height);
+    // make the paper transparent: white becomes see-through, edges stay smooth
+    const id=ox.getImageData(0,0,o.width,o.height), p=id.data; let inkN=0, grey=0;
+    for(let k=0;k<p.length;k+=4){ const r=p[k],g=p[k+1],b=p[k+2],a=p[k+3]; const lum=0.299*r+0.587*g+0.114*b;
+      const cover=Math.min(1,(255-lum)/215)*(a/255); if(cover>0.25){ inkN++; if(Math.max(r,g,b)-Math.min(r,g,b)<40) grey++; } }
+    const mono=inkN>0&&grey/inkN>0.95;
+    const dark=new ImageData(o.width,o.height), light=new ImageData(o.width,o.height);
+    for(let k=0;k<p.length;k+=4){ const r=p[k],g=p[k+1],b=p[k+2],a=p[k+3]; const lum=0.299*r+0.587*g+0.114*b; const cover=Math.round(Math.min(1,(255-lum)/215)*a);
+      if(mono){ dark.data[k]=dark.data[k+1]=dark.data[k+2]=17; light.data[k]=light.data[k+1]=light.data[k+2]=255; dark.data[k+3]=light.data[k+3]=cover; }
+      else { const keep=lum>246?Math.round(a*Math.max(0,(255-lum)/9)):a; dark.data[k]=r; dark.data[k+1]=g; dark.data[k+2]=b; dark.data[k+3]=keep; } }
+    const toURL=im=>{ const q=document.createElement('canvas'); q.width=o.width; q.height=o.height; q.getContext('2d').putImageData(im,0,0); return q.toDataURL('image/png'); };
+    setSettings(n=>({...withDefaults(n),logo:toURL(dark),logoLight:mono?toURL(light):'',logoMono:mono,logoClear:true,logoAspect:+aspect.toFixed(3)}));
   }catch(e){ toast('That image could not be used as a logo. Try a PNG or JPG.',true); } };
   const inp=useRef();
   const [pw,setPw]=useState(''); const [pwBusy,setPwBusy]=useState(false);
@@ -1830,7 +1846,7 @@ function Settings({settings,setSettings,save}){
         <div className="field"><label htmlFor="st-des">Default designer</label><input id="st-des" type="text" value=${s.designer} onChange=${e=>u('designer',e.target.value)}/></div>
         <div className="field"><label htmlFor="st-pre">Reference prefix</label><input id="st-pre" type="text" maxLength="6" value=${s.refPrefix} onChange=${e=>u('refPrefix',e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''))}/><span className="help mono">${s.refPrefix||'ID'}-${new Date().getFullYear()}-001</span></div>
         <div className="field"><label htmlFor="st-acc">Brief accent colour</label><div className="row"><input id="st-acc" type="color" value=${s.accent} onChange=${e=>u('accent',e.target.value)} style=${{width:'48px',height:'38px',padding:'2px'}}/><span className="mono small">${s.accent}</span></div></div>
-        <div className="field full"><span className="flabel">Logo</span><div className="row">${isWideLogo(s)?html`<${LogoWide} settings=${s} large=${true}/>`:html`<${Mark} settings=${s} size="48px"/>`}<button className="btn sm" onClick=${()=>inp.current.click()}><${Icon} n="upload"/>Upload logo</button>${s.logo&&html`<button className="btn ghost sm" onClick=${()=>setSettings(n=>({...withDefaults(n),logo:'',logoAspect:1}))}>Remove</button>`}<input ref=${inp} type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange=${e=>{ if(e.target.files[0]) logo(e.target.files[0]); e.target.value=''; }}/></div><span className="help">Shown in the app, the client portal and on the PDF cover. Square icons and wide logos both work — empty space around the logo is trimmed automatically.</span></div>
+        <div className="field full"><span className="flabel">Logo</span><div className="row">${isWideLogo(s)?html`<${LogoWide} settings=${s} large=${true}/>`:html`<${Mark} settings=${s} size="48px"/>`}<button className="btn sm" onClick=${()=>inp.current.click()}><${Icon} n="upload"/>Upload logo</button>${s.logo&&html`<button className="btn ghost sm" onClick=${()=>setSettings(n=>({...withDefaults(n),logo:'',logoLight:'',logoMono:false,logoClear:false,logoAspect:1}))}>Remove</button>`}<input ref=${inp} type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange=${e=>{ if(e.target.files[0]) logo(e.target.files[0]); e.target.value=''; }}/></div><span className="help">Shown in the app, the client portal and on the PDF cover. Square icons and wide logos both work — empty space around the logo is trimmed automatically.</span></div>
         <div className="field full"><span className="flabel">PDF cover</span><${Radio} opts=${['Minimal white','Colour band']} value=${s.cover==='colour'?'Colour band':'Minimal white'} onChange=${v=>u('cover',v==='Colour band'?'colour':'minimal')} name="Cover"/></div>
         <div className="field full"><label htmlFor="st-foot">Document footer</label><input id="st-foot" type="text" value=${s.footer} onChange=${e=>u('footer',e.target.value)}/></div>
       </div>
