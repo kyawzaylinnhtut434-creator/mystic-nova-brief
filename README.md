@@ -1,4 +1,4 @@
-# Mystic Nova Brief Studio — setup guide
+# Mystic Nova Brief Studio
 
 An interior design brief app for Mystic Nova Design Studio. Clients fill in a guided questionnaire through a private link. You review their answers, generate a professional design brief, send it for approval and export it as a PDF.
 
