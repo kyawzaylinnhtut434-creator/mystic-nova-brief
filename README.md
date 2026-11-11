@@ -27,7 +27,7 @@ Follow the parts in order: **A** (Supabase), **B** (GitHub), **C** (connect them
 
 ---
 
-## Part A — Supabase (the database)
+## Supabase (the database)
 
 ### Step 1. Create a project (skip if you already have one)
 1. Go to https://supabase.com/dashboard and sign in. You can sign in with GitHub.
@@ -64,7 +64,7 @@ You don't need to change anything in the file. It automatically makes the login 
 
 ---
 
-## Part B — GitHub (putting the app online)
+## GitHub (putting the app online)
 
 ### Step 5. Start with a fresh repository
 If you made a repository before, delete it so nothing old gets in the way:
@@ -99,7 +99,7 @@ Your web address looks like `https://your-username.github.io/brief/`. Bookmark i
 
 ---
 
-## Part C — Connect the app to your database
+## Connect the app to your database
 
 Your site opens in **demo mode**, with a yellow bar at the top. That's expected.
 
@@ -135,7 +135,7 @@ Sign in with the email and password from Step 3. **Type the password by hand**, 
 
 ---
 
-## Part D — Optional: keep the free database awake
+## Optional: keep the free database awake
 
 Free Supabase projects go to sleep after **7 days without use**. This makes GitHub visit your database every 3 days so it never sleeps. GitHub won't accept this file by drag-and-drop, so you create it on GitHub instead:
 
